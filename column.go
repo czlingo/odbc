@@ -8,6 +8,7 @@ import (
 	"database/sql/driver"
 	"errors"
 	"fmt"
+	"reflect"
 	"time"
 	"unsafe"
 
@@ -37,6 +38,7 @@ type Column interface {
 	Name() string
 	Bind(h api.SQLHSTMT, idx int) (bool, error)
 	Value(h api.SQLHSTMT, idx int) (driver.Value, error)
+	Type() reflect.Type
 }
 
 func describeColumn(h api.SQLHSTMT, idx int, namebuf []uint16) (namelen int, sqltype api.SQLSMALLINT, size api.SQLULEN, ret api.SQLRETURN) {
@@ -184,6 +186,27 @@ func (c *BaseColumn) Value(buf []byte) (driver.Value, error) {
 	return nil, fmt.Errorf("unsupported column ctype %d", c.CType)
 }
 
+func (c *BaseColumn) Type() reflect.Type {
+	switch c.CType {
+	case api.SQL_C_BIT:
+		return reflect.TypeOf(false)
+	case api.SQL_C_LONG:
+		return reflect.TypeOf(int32(0))
+	case api.SQL_C_SBIGINT:
+		return reflect.TypeOf(int64(0))
+	case api.SQL_C_DOUBLE:
+		return reflect.TypeOf(float64(0))
+	case api.SQL_C_CHAR, api.SQL_C_WCHAR, api.SQL_C_GUID:
+		return reflect.TypeOf("")
+	case api.SQL_C_TYPE_TIMESTAMP, api.SQL_C_DATE, api.SQL_C_TIME:
+		return reflect.TypeOf(time.Time{})
+	case api.SQL_C_BINARY:
+		return reflect.TypeOf(([]byte)(nil))
+	default:
+		return reflect.TypeOf(new(interface{})).Elem()
+	}
+}
+
 // BindableColumn allows access to columns that can have their buffers
 // bound. Once bound at start, they are written to by odbc driver every
 // time it fetches new row. This saves on syscall and, perhaps, some
@@ -259,6 +282,10 @@ func (c *BindableColumn) Value(h api.SQLHSTMT, idx int) (driver.Value, error) {
 	return c.BaseColumn.Value(c.Buffer[:c.Len])
 }
 
+func (c *BindableColumn) Type() reflect.Type {
+	return c.BaseColumn.Type()
+}
+
 // NonBindableColumn provide access to columns, that can't be bound.
 // These are of character or binary type, and, usually, there is no
 // limit for their width.
@@ -325,4 +352,8 @@ loop:
 		}
 	}
 	return c.BaseColumn.Value(total)
+}
+
+func (c *NonBindableColumn) Type() reflect.Type {
+	return c.BaseColumn.Type()
 }

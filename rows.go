@@ -7,6 +7,7 @@ package odbc
 import (
 	"database/sql/driver"
 	"io"
+	"reflect"
 
 	"github.com/alexbrainman/odbc/api"
 )
@@ -63,4 +64,8 @@ func (r *Rows) NextResultSet() error {
 		return err
 	}
 	return nil
+}
+
+func (r *Rows) ColumnTypeScanType(index int) reflect.Type {
+	return r.os.Cols[index].Type()
 }
